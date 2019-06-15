@@ -1,9 +1,9 @@
 Ansible Keepass Plugin
 ######################
 Use **become** (sudo) in Ansible **without giving any password** and safely. This plugin connects to
-**keepass HTTP** to request the password. The connection is encrypted and requires a first confirmation.
-The token for Keepass HTTP is stored using the keyring of the system and the passwords are only accessible
-while the Keepass database is open.
+**keepassHTTP** or **KeepassXC Browser** to request the password. The connection is encrypted and requires a first
+confirmation. The token for Keepass HTTP is stored using the keyring of the system and the passwords are only
+accessible while the Keepass database is open.
 
 Installation
 ============
@@ -23,17 +23,18 @@ Set the var plugins directory to the same directory that contains ``ansible_keep
     vars_plugins = /usr/local/share/ansible/plugins/vars
 
 
-And install this requirement (install the module in the same environment as Ansible)::
+And install requirements from ``requirements.txt`` file in this project (install the modules in the same environment
+as Ansible)::
 
-    sudo pip install keepasshttplib
+    sudo pip install -r requirements.txt
 
 Usage
 =====
-You need a version of Keepass with support for Keepass HTTP. If you use **Keepass**, install the HTTP plugin. If you
-need support for ``.kdbx`` (Keepass 2) databases you can install **KeepassXC**. This plugin does not currently support
-*KeepassXC Browser* so you must enable support for Keepass HTTP.
+This project supports **KeepassHTTP** and **KeepassXC Browser**. This plugin is able to detect your Keepass
+program automatically but if you have issues define the environment variable ``KEEPASS_CLASS`` (available values:
+``KeepassXC`` and ``KeepassHTTP``).
 
-This plugin uses the url of the entry to find the entry to use. In the Keepass entries you must specify the url
+*Ansible-keepass* uses the url of the entry to find the entry to use. In the Keepass entries you must specify the url
 using the name of the inventory or inventory group. For example::
 
     ssh:<inventory name>
@@ -46,14 +47,13 @@ That is all! If you do not set a password now Ansible will ask Keepass for the p
 
 Security
 ========
-These are the security measures adopted by Keepass HTTP and this plugin:
+These are the security measures adopted by Keepass and this plugin:
 
-#. Keepass HTTP requests link permission the first time. This plugin stores the session using the OS Keyring.
-#. Keepass HTTP can authorize access permission for each key individually.
-#. The keys can not be listed using Keepass HTTP. A possible attacker must know key urls.
+#. Keepass requests link permission the first time. This plugin stores the session using the OS Keyring.
+#. Keepass can authorize access permission for each key individually.
+#. Keys can not be listed using Keepass HTTP/XC Browser. A possible attacker must know key urls.
 #. The connection between this plugin and Keepass is encrypted.
 #. Passwords are not accessible while the Keepass database is closed.
 
 This plugin can be more secure than copy&paste: a malware installed on your machine can listen for changes
 in the clipboard. This plugin depends on the security of the OS Keyring and your personal password.
-

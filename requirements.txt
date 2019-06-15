@@ -1,3 +1,4 @@
 keepassxc-browser
 pysodium
 psutil
+keepasshttplib
