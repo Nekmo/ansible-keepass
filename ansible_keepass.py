@@ -1,20 +1,19 @@
 from pathlib import Path
 
 import __main__
-import json
 import requests
+import keyring
 from ansible.plugins.vars import BaseVarsPlugin
 from ansible.executor.task_executor import TaskExecutor as _TaskExecutor
 from ansible.executor import task_executor
 from ansible.executor.process import worker
-from keepasshttplib import keepasshttplib, httpclient, encrypter
+from keepasshttplib import keepasshttplib, encrypter
 from keepassxc_browser import Identity, Connection
 from keepassxc_browser.protocol import ProtocolError
-from urllib3 import HTTPConnectionPool
 
 
 KEEPASSXC_CLIENT_ID = 'python-keepassxc-browser'
-
+KEYRING_KEY = 'assoc'
 
 
 class Keepass(object):
@@ -53,17 +52,18 @@ class Keepass(object):
 
 class KeepassXC(object):
     def __init__(self):
-        self.identity, self.connection = self.get_identity()
+        self.identity = self.get_identity()
+        self.connection = self.get_connection(self.identity)
 
     def get_identity(self):
-        state_file = Path('.assoc')
-        if state_file.exists():
-            with state_file.open('r') as f:
-                data = f.read()
+        data = keyring.get_password(KEEPASSXC_CLIENT_ID, KEYRING_KEY)
+        if data:
             identity = Identity.unserialize(KEEPASSXC_CLIENT_ID, data)
         else:
             identity = Identity(KEEPASSXC_CLIENT_ID)
+        return identity
 
+    def get_connection(self, identity):
         c = Connection()
         c.connect()
         c.change_public_keys(identity)
@@ -74,14 +74,13 @@ class KeepassXC(object):
             exit(1)
 
         if not c.test_associate(identity):
-            associated_name = c.associate(identity)
-            assert c.test_associate(identity)
+            c.associate(identity)
+            assert c.test_associate(identity), "Keepass Association failed"
             data = identity.serialize()
-            with state_file.open('w') as f:
-                f.write(data)
+            keyring.set_password(KEEPASSXC_CLIENT_ID, KEYRING_KEY, data)
             del data
 
-        return identity, c
+        return c
 
     def get_password(self, host):
         return next(iter(self.connection.get_logins(self.identity, url='ssh:{}'.format(host))), {}).get('password')
