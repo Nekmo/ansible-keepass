@@ -1,4 +1,6 @@
-from pathlib import Path
+import os
+
+import psutil
 
 import __main__
 import requests
@@ -13,10 +15,11 @@ from keepassxc_browser.protocol import ProtocolError
 
 
 KEEPASSXC_CLIENT_ID = 'python-keepassxc-browser'
+KEEPASSXC_PROCESS_NAMES = ['keepassxc', 'keepassxc.exe']
 KEYRING_KEY = 'assoc'
 
 
-class Keepass(object):
+class KeepassHTTP(object):
     def __init__(self):
         self.k = keepasshttplib.Keepasshttplib()
 
@@ -41,13 +44,6 @@ class Keepass(object):
             return self.k.test_associate(key, id_)
         except requests.exceptions.ConnectionError:
             return
-
-    @classmethod
-    def get_or_create_conn(cls):
-        if not getattr(__main__, '_keepass', None):
-            # __main__._keepass = Keepass()
-            __main__._keepass = KeepassXC()
-        return __main__._keepass
 
 
 class KeepassXC(object):
@@ -79,18 +75,34 @@ class KeepassXC(object):
             data = identity.serialize()
             keyring.set_password(KEEPASSXC_CLIENT_ID, KEYRING_KEY, data)
             del data
-
         return c
 
     def get_password(self, host):
         return next(iter(self.connection.get_logins(self.identity, url='ssh:{}'.format(host))), {}).get('password')
 
 
+def get_keepass_class():
+    keepass_class = os.environ.get('KEEPASS_CLASS')
+    if not keepass_class and \
+            next(filter(lambda p: (p.name() or '').lower() in KEEPASSXC_PROCESS_NAMES, psutil.process_iter()), None):
+        keepass_class = 'KeepassXC'
+    return {
+        'KeepassXC': KeepassXC,
+        'KeepassHTTP': KeepassHTTP,
+    }.get(keepass_class, KeepassHTTP)
+
+
+def get_or_create_conn(cls):
+    if not getattr(__main__, '_keepass', None):
+        __main__._keepass = cls()
+    return __main__._keepass
+
+
 class TaskExecutor(_TaskExecutor):
     def __init__(self, host, task, job_vars, play_context, new_stdin, loader, shared_loader_obj, final_q):
         become = task.become or play_context.become
         if become and not job_vars.get('ansible_become_pass'):
-            kp = Keepass.get_or_create_conn()
+            kp = get_or_create_conn(get_keepass_class())
             password = kp.get_password(host)
             if password:
                 job_vars['ansible_become_pass'] = password
@@ -117,4 +129,3 @@ class VarsModule(BaseVarsPlugin):
 
     def get_group_vars(self, *args, **kwargs):
         return {}
-
