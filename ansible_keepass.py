@@ -19,8 +19,28 @@ KEEPASSXC_PROCESS_NAMES = ['keepassxc', 'keepassxc.exe']
 KEYRING_KEY = 'assoc'
 
 
-class KeepassHTTP(object):
+class NONE:
+    pass
+
+
+class KeepassBase(object):
     def __init__(self):
+        self.cached_passwords = {}
+
+    def get_cached_password(self, host):
+        password = self.cached_passwords.get(host, NONE)
+        if password is NONE:
+            password = self.get_password(host)
+            self.cached_passwords[host] = password
+        return password
+
+    def get_password(self, host):
+        raise NotImplementedError
+
+
+class KeepassHTTP(KeepassBase):
+    def __init__(self):
+        super(KeepassHTTP, self).__init__()
         self.k = keepasshttplib.Keepasshttplib()
 
     def get_password(self, host):
@@ -46,10 +66,15 @@ class KeepassHTTP(object):
             return
 
 
-class KeepassXC(object):
+class KeepassXC(KeepassBase):
+    _connection = None
+
     def __init__(self):
-        self.identity = self.get_identity()
-        self.connection = self.get_connection(self.identity)
+        super(KeepassXC, self).__init__()
+        try:
+            self.identity = self.get_identity()
+        except Exception as e:
+            print(e)
 
     def get_identity(self):
         data = keyring.get_password(KEEPASSXC_CLIENT_ID, KEYRING_KEY)
@@ -77,6 +102,15 @@ class KeepassXC(object):
             del data
         return c
 
+    @property
+    def connection(self):
+        if self._connection is None:
+            try:
+                self._connection = self.get_connection(self.identity)
+            except Exception as e:
+                print(e)
+        return self._connection
+
     def get_password(self, host):
         return next(iter(self.connection.get_logins(self.identity, url='ssh:{}'.format(host))), {}).get('password')
 
@@ -103,7 +137,7 @@ class TaskExecutor(_TaskExecutor):
         become = task.become or play_context.become
         if become and not job_vars.get('ansible_become_pass'):
             kp = get_or_create_conn(get_keepass_class())
-            password = kp.get_password(host)
+            password = kp.get_cached_password(host)
             if password:
                 job_vars['ansible_become_pass'] = password
         super(TaskExecutor, self).__init__(host, task, job_vars, play_context, new_stdin, loader,
