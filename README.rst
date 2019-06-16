@@ -43,7 +43,10 @@ Or including username::
 
     ssh:<username>@<inventory name>
 
-That is all! If you do not set a password now Ansible will ask Keepass for the password.
+That is all! If you do not set a password now Ansible will ask Keepass for the password. You can try this plugin using::
+
+    $  ansible <host_name> -a "/usr/bin/hdparm -C /dev/sda" --become
+
 
 Security
 ========
