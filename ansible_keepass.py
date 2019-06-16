@@ -19,6 +19,24 @@ KEEPASSXC_PROCESS_NAMES = ['keepassxc', 'keepassxc.exe']
 KEYRING_KEY = 'assoc'
 
 
+class AnsibleKeepassError(Exception):
+    body = 'Error in the Ansible Keepass plugin'
+
+    def __init__(self, msg=''):
+        body = self.body
+        if msg:
+            body += ' {}'.format(msg)
+        super().__init__(body)
+
+
+class KeepassHTTPError(AnsibleKeepassError):
+    body = 'The password for root could not be obtained using Keepass HTTP.'
+
+
+class KeepassXCError(AnsibleKeepassError):
+    body = 'The password for root could not be obtained using KeepassXC Browser.'
+
+
 class NONE:
     pass
 
@@ -45,15 +63,13 @@ class KeepassHTTP(KeepassBase):
 
     def get_password(self, host):
         if not self.test_connection():
-            print('Keepass is closed! sudo password is not available.')
-            return
+            raise KeepassHTTPError('Keepass is closed!')
         hosts = [host.name] + [group.name for group in host.groups]
         for host_name in hosts:
             auth = self.k.get_credentials('ssh://{}'.format(host_name))
             if auth:
                 return auth[1]
-        print('The password could not be obtained for {}'.format(', '.join(map(str, hosts))))
-        return
+        raise KeepassHTTPError('The password could not be obtained for {}'.format(', '.join(map(str, hosts))))
 
     def test_connection(self):
         key = self.k.get_key_from_keyring()
@@ -62,8 +78,8 @@ class KeepassHTTP(KeepassBase):
         id_ = self.k.get_id_from_keyring()
         try:
             return self.k.test_associate(key, id_)
-        except requests.exceptions.ConnectionError:
-            return
+        except requests.exceptions.ConnectionError as e:
+            raise KeepassHTTPError('Connection Error: {}'.format(e))
 
 
 class KeepassXC(KeepassBase):
@@ -74,7 +90,7 @@ class KeepassXC(KeepassBase):
         try:
             self.identity = self.get_identity()
         except Exception as e:
-            print(e)
+            raise KeepassXCError('The identity could not be obtained: {}'.format(e))
 
     def get_identity(self):
         data = keyring.get_password(KEEPASSXC_CLIENT_ID, KEYRING_KEY)
@@ -88,11 +104,7 @@ class KeepassXC(KeepassBase):
         c = Connection()
         c.connect()
         c.change_public_keys(identity)
-        try:
-            c.get_database_hash(identity)
-        except ProtocolError as ex:
-            print(ex)
-            exit(1)
+        c.get_database_hash(identity)
 
         if not c.test_associate(identity):
             c.associate(identity)
@@ -107,8 +119,10 @@ class KeepassXC(KeepassBase):
         if self._connection is None:
             try:
                 self._connection = self.get_connection(self.identity)
+            except ProtocolError as e:
+                raise AnsibleKeepassError('ProtocolError on connection: {}'.format(e))
             except Exception as e:
-                print(e)
+                raise AnsibleKeepassError('Error on connection: {}'.format(e))
         return self._connection
 
     def get_password(self, host):
