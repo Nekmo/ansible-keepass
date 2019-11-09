@@ -1,4 +1,4 @@
-keepassxc-browser
+git+https://github.com/hrehfeld/python-keepassxc-browser.git@master
 pysodium
 psutil
 keepasshttplib
