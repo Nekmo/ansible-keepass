@@ -42,11 +42,13 @@ class KeepassConnectionError(AnsibleKeepassError):
 
 
 class KeepassHTTPError(AnsibleKeepassError):
-    body = 'The password for root could not be obtained using Keepass HTTP.'
+    body = ('The password for root could not be obtained using Keepass '
+            'HTTP.')
 
 
 class KeepassXCError(AnsibleKeepassError):
-    body = 'The password for root could not be obtained using KeepassXC Browser.'
+    body = ('The password for root could not be obtained using '
+            'KeepassXC Browser.')
 
 
 class KeepassBase(object):
@@ -80,7 +82,9 @@ class KeepassHTTP(KeepassBase):
         try:
             auth = self.k.get_credentials('ssh://{}'.format(host_name))
         except Exception as e:
-            raise KeepassHTTPError('Error obtaining host name {}: {}'.format(host_name, e))
+            raise KeepassHTTPError(
+                'Error obtaining host name {}: {}'.format(host_name, e)
+            )
         if auth:
             return auth[1]
 
@@ -103,7 +107,10 @@ class KeepassXC(KeepassBase):
         try:
             self.identity = self.get_identity()
         except Exception as e:
-            raise KeepassConnectionError('The identity could not be obtained from KeepassXC: {}'.format(e))
+            raise KeepassConnectionError(
+                'The identity could not be obtained from '
+                'KeepassXC: {}'.format(e)
+            )
 
     def get_identity(self):
         data = keyring.get_password(KEEPASSXC_CLIENT_ID, KEYRING_KEY)
@@ -133,18 +140,27 @@ class KeepassXC(KeepassBase):
             try:
                 self._connection = self.get_connection(self.identity)
             except ProtocolError as e:
-                raise AnsibleKeepassError('ProtocolError on connection: {}'.format(e))
+                raise AnsibleKeepassError(
+                    'ProtocolError on connection: {}'.format(e)
+                )
             except Exception as e:
-                raise AnsibleKeepassError('Error on connection: {}'.format(e))
+                raise AnsibleKeepassError(
+                    'Error on connection: {}'.format(e)
+                )
         return self._connection
 
     def get_password(self, host_name):
         try:
-            logins = self.connection.get_logins(self.identity, url='ssh:{}'.format(host_name))
+            logins = self.connection.get_logins(
+                self.identity,
+                url='ssh:{}'.format(host_name)
+            )
         except ProtocolError:
             return
         except Exception as e:
-            raise KeepassXCError('Error obtaining host name {}: {}'.format(host_name, e))
+            raise KeepassXCError(
+                'Error obtaining host name {}: {}'.format(host_name, e)
+            )
         return next(iter(logins), {}).get('password')
 
 
@@ -154,9 +170,12 @@ def get_host_names(host):
 
 def get_keepass_class():
     keepass_class = os.environ.get('KEEPASS_CLASS')
-    if not keepass_class and \
-            next(filter(lambda p: (p.name() or '').lower() in KEEPASSXC_PROCESS_NAMES, psutil.process_iter()), None):
-        keepass_class = 'KeepassXC'
+    if not keepass_class:
+        for process in psutil.process_iter():
+            process_name = process.name().lower() or ''
+            if process_name in KEEPASSXC_PROCESS_NAMES:
+                keepass_class = 'KeepassXC'
+                break
     return {
         'KeepassXC': KeepassXC,
         'KeepassHTTP': KeepassHTTP,
@@ -170,7 +189,8 @@ def get_or_create_conn(cls):
 
 
 class TaskExecutor(_TaskExecutor):
-    def __init__(self, host, task, job_vars, play_context, new_stdin, loader, shared_loader_obj, final_q):
+    def __init__(self, host, task, job_vars, play_context, *args,
+                    **kwargs):
         become = task.become or play_context.become
         if become and not job_vars.get('ansible_become_pass'):
             password = NONE
@@ -181,13 +201,17 @@ class TaskExecutor(_TaskExecutor):
             except AnsibleKeepassError as e:
                 display.error(e)
             if password is None:
-                display.warning('The password could not be obtained using {}. Hosts tried: {}. Maybe the password is '
-                                'not in the database or does not have the url.'.format(
-                    cls.__name__, ', '.join(get_host_names(host))))
+                display.warning(
+                    'The password could not be obtained using '
+                    '{}. Hosts tried: '.format(cls.__name__) +
+                    '{}. '.format(', '.join(get_host_names(host))) +
+                    'Maybe the password is not in the database or does '
+                    'not have the url.'
+                )
             elif password not in [None, NONE]:
                 job_vars['ansible_become_pass'] = password
-        super(TaskExecutor, self).__init__(host, task, job_vars, play_context, new_stdin, loader,
-                                           shared_loader_obj, final_q)
+        super(TaskExecutor, self).__init__(host, task, job_vars,
+            play_context, *args, **kwargs)
 
 
 setattr(task_executor, 'TaskExecutor', TaskExecutor)
