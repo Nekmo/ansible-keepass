@@ -16,7 +16,8 @@ from keepassxc_browser.protocol import ProtocolError
 
 
 KEEPASSXC_CLIENT_ID = 'python-keepassxc-browser'
-KEEPASSXC_PROCESS_NAMES = ['keepassxc', 'keepassxc.exe']
+KEEPASSXC_PROCESS_NAMES = set(('keepassxc', 'keepassxc.exe',
+                               'keepassxc-proxy'))
 KEYRING_KEY = 'assoc'
 
 
